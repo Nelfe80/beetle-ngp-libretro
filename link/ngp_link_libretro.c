@@ -403,11 +403,24 @@ RETRO_API void retro_run(void)
    video_front(ecran, LARGEUR_ECRAN * 2, HAUTEUR_ECRAN, LARGEUR_ECRAN * 2 * sizeof(uint16_t));
 }
 
-/* L'etat : [taille 1][taille 2][console 1][console 2][les deux files du cable]. */
+/* L'etat : [taille 1][taille 2][console 1][console 2][les deux files du cable][zeros jusqu'a la taille fixe].
+ * La TAILLE EST FIXE : mednafen range la flash a sa longueur du moment, et la netplay de RetroArch refuse un etat dont la
+ * taille change (l'hote chargeait 72 376 octets puis en sauvait 71 728, et n'acceptait plus personne). On reserve, des le
+ * premier appel, la plus grande des deux consoles plus une marge pour la flash. */
+#define MARGE_FLASH 0x40000
+static size_t taille_fixe;
+
 RETRO_API size_t retro_serialize_size(void)
 {
+   size_t t1, t2;
    TRACE("serialize_size");
-   return 2 * sizeof(uint32_t) + consoles[0].serialize_size() + consoles[1].serialize_size() + sizeof(cable);
+   if (!taille_fixe)
+   {
+      t1 = consoles[0].serialize_size();
+      t2 = consoles[1].serialize_size();
+      taille_fixe = 2 * sizeof(uint32_t) + 2 * ((t1 > t2 ? t1 : t2) + MARGE_FLASH) + sizeof(cable);
+   }
+   return taille_fixe;
 }
 
 RETRO_API bool retro_serialize(void *donnees, size_t taille)
@@ -415,8 +428,9 @@ RETRO_API bool retro_serialize(void *donnees, size_t taille)
    TRACE("serialize %u", (unsigned)taille);
    uint8_t *p = (uint8_t *)donnees;
    uint32_t t1 = (uint32_t)consoles[0].serialize_size(), t2 = (uint32_t)consoles[1].serialize_size();
-   if (taille < 2 * sizeof(uint32_t) + t1 + t2 + sizeof(cable))
+   if (taille < retro_serialize_size() || retro_serialize_size() < 2 * sizeof(uint32_t) + t1 + t2 + sizeof(cable))
       return false;
+   memset(donnees, 0, retro_serialize_size());
    memcpy(p, &t1, sizeof(t1));
    memcpy(p + 4, &t2, sizeof(t2));
    p += 8;
@@ -488,6 +502,7 @@ RETRO_API void retro_unload_game(void)
 {
    consoles[0].unload_game();
    consoles[1].unload_game();
+   taille_fixe = 0;
 }
 
 RETRO_API unsigned retro_get_region(void) { return consoles[0].get_region(); }
