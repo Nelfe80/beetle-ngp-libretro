@@ -424,6 +424,7 @@ RETRO_API void retro_run(void)
       TRACE("image %u : console 2", images_jouees);
    consoles[1].run();
    images_jouees++;
+#ifdef NGPLINK_TRACES
    if (images_jouees % 300 == 0)
    {
       char t[200];
@@ -438,6 +439,7 @@ RETRO_API void retro_run(void)
       journal("octets console 2 :");
       journal(trace_octets[1]);
    }
+#endif
    for (y = 0; y < HAUTEUR_ECRAN; y++)
    {
       memcpy(ecran + y * LARGEUR_ECRAN * 2, consoles[0].image + y * LARGEUR_ECRAN, LARGEUR_ECRAN * 2);

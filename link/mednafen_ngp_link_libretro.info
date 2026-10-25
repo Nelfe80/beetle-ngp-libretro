@@ -1,0 +1,22 @@
+# Software Information
+display_name = "SNK - Neo Geo Pocket / Color (Beetle NGP Link)"
+authors = "neopop_uk|Mednafen Team|NelfePlay"
+supported_extensions = "ngp|ngc|ngpc|npc"
+corename = "Beetle NGP Link"
+license = "GPLv2"
+permissions = ""
+display_version = "v0.1 NelfePlay"
+categories = "Emulator"
+
+# Hardware Information
+manufacturer = "SNK"
+systemname = "Neo Geo Pocket (Color)"
+systemid = "neo_geo_pocket"
+
+# Libretro Features
+supports_no_game = "false"
+database = "SNK - Neo Geo Pocket|SNK - Neo Geo Pocket Color"
+savestate = "true"
+savestate_features = "deterministic"
+
+description = "Two Neo Geo Pocket consoles joined by the link cable in one core (two copies of the Beetle NeoPop engine), both screens side by side: player 1 plays console 1, player 2 plays console 2."
