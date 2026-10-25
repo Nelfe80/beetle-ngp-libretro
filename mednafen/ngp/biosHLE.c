@@ -356,7 +356,11 @@ void iBIOSHLE(void)
       case 0xFF2D4E:
 
          // Receive Buffer Count
+#ifdef NGPLINK
+         rCodeW(0x30) = system_comms_count();
+#else
          rCodeW(0x30) = system_comms_read(NULL);
+#endif
 
          break;
 

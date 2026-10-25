@@ -280,7 +280,11 @@ bool updateTimers(void *data, int cputicks)
       timer_hint -= TIMER_HINT_RATE;	/* Start of next scanline */
 
       /* Comms. Read interrupt */
+#ifdef NGPLINK
+      if (ngplink_rx_interrupt && (COMMStatus & 1) == 0 && system_comms_poll(&_data))
+#else
       if ((COMMStatus & 1) == 0 && system_comms_poll(&_data))
+#endif
       {
          storeB(0x50, _data);
          TestIntHDMA(12, 0x19);

@@ -36,6 +36,12 @@ bool system_comms_read(uint8_t* buffer);
 	If buffer is NULL, then no data is read, only status is returned */
 bool system_comms_poll(uint8_t* buffer);
 
+#ifdef NGPLINK
+/*! NGP LINK : le nombre d'octets recus (COMRECIVESTATUS) et l'interruption de reception (coupee par defaut). */
+int system_comms_count(void);
+extern int ngplink_rx_interrupt;
+#endif
+
 
 /*! Writes a byte from the other system. This function should block until
 	the data is written. USE RELIABLE COMMS! Data cannot be re-requested. */

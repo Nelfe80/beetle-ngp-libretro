@@ -40,6 +40,18 @@ NGPLINK_API void ngplink_set_flash_suffix(const char *suffixe)
 bool system_comms_read(uint8_t* buffer) { return link_read ? link_read(buffer) : 0; }
 bool system_comms_poll(uint8_t* buffer) { return link_poll ? link_poll(buffer) : 0; }
 void system_comms_write(uint8_t data) { if (link_write) link_write(data); }
+
+/* COMRECIVESTATUS rend le NOMBRE d'octets recus (le BIOS reel compte son tampon) : un jeu qui attend une trame
+ * entiere avant de la lire voyait toujours « 1 ». Comme l'emulation de caioluders/ngp-link. */
+static int (*link_count)(void) = NULL;
+NGPLINK_API void ngplink_set_count(int (*compter)(void)) { link_count = compter; }
+int system_comms_count(void) { return link_count ? link_count() : (system_comms_read(NULL) ? 1 : 0); }
+
+/* L'interruption de reception a chaque ligne tant qu'un octet attend : les jeux « BIOS COM » (Card Fighters' Clash)
+ * ne posent pas de gestionnaire et interrogent le BIOS ; seuls les jeux qui pilotent eux-memes le port serie (SNK vs
+ * Capcom, KOF R-2) en ont besoin. Coupee par defaut. */
+int ngplink_rx_interrupt = 0;
+NGPLINK_API void ngplink_set_rx_interrupt(int actif) { ngplink_rx_interrupt = actif; }
 #define FLASH_SUFFIX flash_suffix
 #else
 bool system_comms_read(uint8_t* buffer) { return 0; }

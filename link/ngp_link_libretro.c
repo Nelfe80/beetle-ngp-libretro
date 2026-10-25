@@ -46,6 +46,8 @@ typedef struct
    size_t (*get_memory_size)(unsigned);
    void (*set_comms)(bool (*)(uint8_t *), bool (*)(uint8_t *), void (*)(uint8_t));
    void (*set_flash_suffix)(const char *);
+   void (*set_count)(int (*)(void));
+   void (*set_rx_interrupt)(int);
    uint16_t image[LARGEUR_ECRAN * HAUTEUR_ECRAN];
 } moteur_t;
 
@@ -71,8 +73,24 @@ static retro_input_state_t state_front;
 static bool mise_a_jour_b;
 static uint16_t ecran[LARGEUR_ECRAN * 2 * HAUTEUR_ECRAN];
 
+/* Mise au point : les 64 premiers octets envoyes par chaque console, avec l'image ou ils partent. */
+static unsigned images_jouees;
+static char trace_octets[2][64 * 12];
+static unsigned octets_traces[2];
+
+static void tracer(int console, uint8_t octet)
+{
+   if (octets_traces[console] < 64)
+   {
+      size_t n = strlen(trace_octets[console]);
+      snprintf(trace_octets[console] + n, sizeof(trace_octets[console]) - n, "%02X@%u ", octet, images_jouees);
+      octets_traces[console]++;
+   }
+}
+
 static void pousser(file_t *f, uint8_t octet)
 {
+   tracer(f == &cable[0] ? 0 : 1, octet);
    if (f->nombre >= CAPACITE_FILE)
       return; /* le cable deborde : l'octet est perdu, comme un tampon plein */
    f->octets[(f->debut + f->nombre) % CAPACITE_FILE] = octet;
@@ -105,6 +123,10 @@ static void ecrire_a(uint8_t o) { compte[0][2]++; pousser(&cable[0], o); }
 static bool lire_b(uint8_t *o) { compte[1][0]++; return regarder(&cable[0], o, true); }
 static bool guetter_b(uint8_t *o) { compte[1][1]++; return regarder(&cable[0], o, false); }
 static void ecrire_b(uint8_t o) { compte[1][2]++; pousser(&cable[1], o); }
+/* COMRECIVESTATUS : ce qui attend sur le cable pour chaque console. */
+static unsigned comptages[2];
+static int compter_a(void) { comptages[0]++; return (int)cable[1].nombre; }
+static int compter_b(void) { comptages[1]++; return (int)cable[0].nombre; }
 
 static void journal(const char *texte)
 {
@@ -114,7 +136,6 @@ static void journal(const char *texte)
 }
 
 /* Traces de mise au point : chaque appel du frontal ou des moteurs apres les premieres images. */
-static unsigned images_jouees;
 #ifdef NGPLINK_TRACES
 #define TRACE(...) do { if (images_jouees >= 2 && images_jouees < 4000) { char t_[200]; snprintf(t_, sizeof(t_), __VA_ARGS__); journal(t_); } } while (0)
 #else
@@ -160,6 +181,8 @@ static bool charger_moteur(moteur_t *m, const wchar_t *chemin)
    PRENDRE(get_memory_size, "retro_get_memory_size")
    PRENDRE(set_comms, "ngplink_set_comms")
    PRENDRE(set_flash_suffix, "ngplink_set_flash_suffix")
+   PRENDRE(set_count, "ngplink_set_count")
+   PRENDRE(set_rx_interrupt, "ngplink_set_rx_interrupt")
 #undef PRENDRE
    return true;
 }
@@ -188,6 +211,16 @@ static bool charger(void)
    consoles[0].set_comms(lire_a, guetter_a, ecrire_a);
    consoles[1].set_comms(lire_b, guetter_b, ecrire_b);
    consoles[1].set_flash_suffix("flash-p2");
+   consoles[0].set_count(compter_a);
+   consoles[1].set_count(compter_b);
+   /* L'interruption de reception, coupee par defaut (jeux « BIOS COM ») ; NGPLINK_RX_IRQ=1 la rallume (jeux qui
+    * pilotent eux-memes le port serie). */
+   {
+      const char *irq = getenv("NGPLINK_RX_IRQ");
+      int actif = irq && irq[0] == '1';
+      consoles[0].set_rx_interrupt(actif);
+      consoles[1].set_rx_interrupt(actif);
+   }
    charges = true;
    return true;
 }
@@ -394,6 +427,12 @@ RETRO_API void retro_run(void)
             images_jouees, compte[0][0], compte[0][1], compte[0][2], compte[1][0], compte[1][1], compte[1][2],
             cable[0].nombre, cable[1].nombre);
       journal(t);
+      snprintf(t, sizeof(t), "comptages : console 1 %u, console 2 %u", comptages[0], comptages[1]);
+      journal(t);
+      journal("octets console 1 :");
+      journal(trace_octets[0]);
+      journal("octets console 2 :");
+      journal(trace_octets[1]);
    }
    for (y = 0; y < HAUTEUR_ECRAN; y++)
    {
