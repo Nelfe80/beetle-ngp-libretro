@@ -13,10 +13,12 @@
 #ifdef NGPLINK
 /* NGP LINK (NelfePlay) : le port de liaison est branche par le coeur enveloppe, qui charge deux moteurs et relie
  * leurs ports. Sans branchement, le port reste muet comme dans le coeur d'origine. */
+#ifndef NGPLINK_API
 #ifdef _WIN32
 #define NGPLINK_API __declspec(dllexport)
 #else
 #define NGPLINK_API __attribute__((visibility("default")))
+#endif
 #endif
 static bool (*link_read)(uint8_t*) = NULL;
 static bool (*link_poll)(uint8_t*) = NULL;

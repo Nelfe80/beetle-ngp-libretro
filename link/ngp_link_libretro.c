@@ -1,7 +1,8 @@
 /* NGP LINK (NelfePlay, 25/10) : deux Neo Geo Pocket reliees par le cable de liaison, dans un seul coeur libretro.
  *
- * Le coeur charge deux copies du moteur (ngp_link_engine_a.dll, ngp_link_engine_b.dll : Beetle NGP compile avec
- * NGPLINK, chaque copie a ses propres variables), relie leurs ports serie par deux files, et montre les deux ecrans
+ * Le coeur porte deux copies du moteur (Beetle NGP compile avec NGPLINK, liees dans ce fichier : chaque symbole de
+ * l'une est prefixe a_, de l'autre b_, chaque copie a donc ses propres variables), relie leurs ports serie par deux
+ * files, et montre les deux ecrans
  * cote a cote. La manette 1 joue sur la console 1, la manette 2 sur la console 2 : en netplay, chaque borne a sa
  * console. Les deux consoles tournent tour a tour, une image chacune, dans le meme retro_run : tout est deterministe,
  * la sauvegarde d'etat porte les deux consoles ET les octets en route sur le cable. */
@@ -20,7 +21,6 @@
 
 typedef struct
 {
-   HMODULE dll;
    void (*set_environment)(retro_environment_t);
    void (*set_video_refresh)(retro_video_refresh_t);
    void (*set_audio_sample)(retro_audio_sample_t);
@@ -142,72 +142,76 @@ static void journal(const char *texte)
 #define TRACE(...) do { } while (0)
 #endif
 
-static bool charger_moteur(moteur_t *m, const wchar_t *chemin)
-{
-   m->dll = LoadLibraryW(chemin);
-   if (!m->dll)
-   {
-      snprintf(erreur, sizeof(erreur), "moteur introuvable (%lu)", (unsigned long)GetLastError());
-      return false;
-   }
-#define PRENDRE(champ, nom) \
-   if (!(*(FARPROC *)&m->champ = GetProcAddress(m->dll, nom))) \
-   { \
-      snprintf(erreur, sizeof(erreur), "fonction absente du moteur : %s", nom); \
-      return false; \
-   }
-   PRENDRE(set_environment, "retro_set_environment")
-   PRENDRE(set_video_refresh, "retro_set_video_refresh")
-   PRENDRE(set_audio_sample, "retro_set_audio_sample")
-   PRENDRE(set_audio_sample_batch, "retro_set_audio_sample_batch")
-   PRENDRE(set_input_poll, "retro_set_input_poll")
-   PRENDRE(set_input_state, "retro_set_input_state")
-   PRENDRE(init, "retro_init")
-   PRENDRE(deinit, "retro_deinit")
-   PRENDRE(get_system_info, "retro_get_system_info")
-   PRENDRE(get_system_av_info, "retro_get_system_av_info")
-   PRENDRE(set_controller_port_device, "retro_set_controller_port_device")
-   PRENDRE(reset, "retro_reset")
-   PRENDRE(run, "retro_run")
-   PRENDRE(serialize_size, "retro_serialize_size")
-   PRENDRE(serialize, "retro_serialize")
-   PRENDRE(unserialize, "retro_unserialize")
-   PRENDRE(cheat_reset, "retro_cheat_reset")
-   PRENDRE(cheat_set, "retro_cheat_set")
-   PRENDRE(load_game, "retro_load_game")
-   PRENDRE(unload_game, "retro_unload_game")
-   PRENDRE(get_region, "retro_get_region")
-   PRENDRE(get_memory_data, "retro_get_memory_data")
-   PRENDRE(get_memory_size, "retro_get_memory_size")
-   PRENDRE(set_comms, "ngplink_set_comms")
-   PRENDRE(set_flash_suffix, "ngplink_set_flash_suffix")
-   PRENDRE(set_count, "ngplink_set_count")
-   PRENDRE(set_rx_interrupt, "ngplink_set_rx_interrupt")
-#undef PRENDRE
-   return true;
-}
+/* Les deux copies du moteur : link/prefixer.sh met a_ ou b_ devant chaque symbole global d'une copie. */
+#define DECLARER(p) \
+   void p##retro_set_environment(retro_environment_t); \
+   void p##retro_set_video_refresh(retro_video_refresh_t); \
+   void p##retro_set_audio_sample(retro_audio_sample_t); \
+   void p##retro_set_audio_sample_batch(retro_audio_sample_batch_t); \
+   void p##retro_set_input_poll(retro_input_poll_t); \
+   void p##retro_set_input_state(retro_input_state_t); \
+   void p##retro_init(void); \
+   void p##retro_deinit(void); \
+   void p##retro_get_system_info(struct retro_system_info *); \
+   void p##retro_get_system_av_info(struct retro_system_av_info *); \
+   void p##retro_set_controller_port_device(unsigned, unsigned); \
+   void p##retro_reset(void); \
+   void p##retro_run(void); \
+   size_t p##retro_serialize_size(void); \
+   bool p##retro_serialize(void *, size_t); \
+   bool p##retro_unserialize(const void *, size_t); \
+   void p##retro_cheat_reset(void); \
+   void p##retro_cheat_set(unsigned, bool, const char *); \
+   bool p##retro_load_game(const struct retro_game_info *); \
+   void p##retro_unload_game(void); \
+   unsigned p##retro_get_region(void); \
+   void *p##retro_get_memory_data(unsigned); \
+   size_t p##retro_get_memory_size(unsigned); \
+   void p##ngplink_set_comms(bool (*)(uint8_t *), bool (*)(uint8_t *), void (*)(uint8_t)); \
+   void p##ngplink_set_flash_suffix(const char *); \
+   void p##ngplink_set_count(int (*)(void)); \
+   void p##ngplink_set_rx_interrupt(int);
+DECLARER(a_)
+DECLARER(b_)
 
-/* Les deux moteurs sont a cote de ce coeur, sous deux noms : Windows ne charge qu'une fois un meme fichier, deux
- * fichiers donnent deux jeux de variables. */
+#define BRANCHER(m, p) \
+   do { \
+      (m)->set_environment = p##retro_set_environment; \
+      (m)->set_video_refresh = p##retro_set_video_refresh; \
+      (m)->set_audio_sample = p##retro_set_audio_sample; \
+      (m)->set_audio_sample_batch = p##retro_set_audio_sample_batch; \
+      (m)->set_input_poll = p##retro_set_input_poll; \
+      (m)->set_input_state = p##retro_set_input_state; \
+      (m)->init = p##retro_init; \
+      (m)->deinit = p##retro_deinit; \
+      (m)->get_system_info = p##retro_get_system_info; \
+      (m)->get_system_av_info = p##retro_get_system_av_info; \
+      (m)->set_controller_port_device = p##retro_set_controller_port_device; \
+      (m)->reset = p##retro_reset; \
+      (m)->run = p##retro_run; \
+      (m)->serialize_size = p##retro_serialize_size; \
+      (m)->serialize = p##retro_serialize; \
+      (m)->unserialize = p##retro_unserialize; \
+      (m)->cheat_reset = p##retro_cheat_reset; \
+      (m)->cheat_set = p##retro_cheat_set; \
+      (m)->load_game = p##retro_load_game; \
+      (m)->unload_game = p##retro_unload_game; \
+      (m)->get_region = p##retro_get_region; \
+      (m)->get_memory_data = p##retro_get_memory_data; \
+      (m)->get_memory_size = p##retro_get_memory_size; \
+      (m)->set_comms = p##ngplink_set_comms; \
+      (m)->set_flash_suffix = p##ngplink_set_flash_suffix; \
+      (m)->set_count = p##ngplink_set_count; \
+      (m)->set_rx_interrupt = p##ngplink_set_rx_interrupt; \
+   } while (0)
+
+/* Les deux moteurs sont dans ce coeur : les brancher ne peut pas echouer, une seule fois suffit. */
 static bool charger(void)
 {
-   HMODULE moi = NULL;
-   wchar_t dossier[MAX_PATH], chemin[MAX_PATH];
-   wchar_t *barre;
    if (charges)
       return true;
-   if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            (LPCWSTR)&charger, &moi) || !GetModuleFileNameW(moi, dossier, MAX_PATH))
-      return false;
-   barre = wcsrchr(dossier, L'\\');
-   if (barre)
-      barre[1] = 0;
-   _snwprintf(chemin, MAX_PATH, L"%sngp_link_engine_a.dll", dossier);
-   if (!charger_moteur(&consoles[0], chemin))
-      return false;
-   _snwprintf(chemin, MAX_PATH, L"%sngp_link_engine_b.dll", dossier);
-   if (!charger_moteur(&consoles[1], chemin))
-      return false;
+   BRANCHER(&consoles[0], a_);
+   BRANCHER(&consoles[1], b_);
    consoles[0].set_comms(lire_a, guetter_a, ecrire_a);
    consoles[1].set_comms(lire_b, guetter_b, ecrire_b);
    consoles[1].set_flash_suffix("flash-p2");
