@@ -431,7 +431,7 @@ RETRO_API void retro_get_system_info(struct retro_system_info *info)
    if (charger())
       consoles[0].get_system_info(info);
    info->library_name = "Beetle NGP Link";
-   info->library_version = "0.2 NelfePlay";
+   info->library_version = "0.3 NelfePlay";
    if (!info->valid_extensions)
       info->valid_extensions = "ngp|ngc|ngpc|npc";
 }
@@ -566,6 +566,35 @@ RETRO_API bool retro_unserialize(const void *donnees, size_t taille)
 RETRO_API void retro_cheat_reset(void) { consoles[0].cheat_reset(); }
 RETRO_API void retro_cheat_set(unsigned index, bool enabled, const char *code) { consoles[0].cheat_set(index, enabled, code); }
 
+/* La memoire des deux consoles pour READ/WRITE_CORE_MEMORY : la console 1 a 0x10004000, la console 2 a 0x20004000 (un
+ * ecart de 0x10000000 par console), et la console 1 aussi a 0x4000, son adresse reelle, que READ_CORE_RAM et les
+ * succes lisent comme avant. */
+static struct retro_memory_descriptor descripteurs[3];
+static struct retro_memory_map carte_memoire;
+
+static void declarer_la_memoire(void)
+{
+   void *ram1 = consoles[0].get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+   void *ram2 = consoles[1].get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+   size_t taille = consoles[0].get_memory_size(RETRO_MEMORY_SYSTEM_RAM);
+   if (!ram1 || !ram2 || !taille || consoles[1].get_memory_size(RETRO_MEMORY_SYSTEM_RAM) != taille)
+      return;
+   memset(descripteurs, 0, sizeof(descripteurs));
+   descripteurs[0].flags = RETRO_MEMDESC_SYSTEM_RAM;
+   descripteurs[0].ptr = ram1;
+   descripteurs[0].start = 0x4000;
+   descripteurs[0].len = taille;
+   descripteurs[1].ptr = ram1;
+   descripteurs[1].start = 0x10004000;
+   descripteurs[1].len = taille;
+   descripteurs[2].ptr = ram2;
+   descripteurs[2].start = 0x20004000;
+   descripteurs[2].len = taille;
+   carte_memoire.descriptors = descripteurs;
+   carte_memoire.num_descriptors = 3;
+   env_front(RETRO_ENVIRONMENT_SET_MEMORY_MAPS, &carte_memoire);
+}
+
 RETRO_API bool retro_load_game(const struct retro_game_info *info)
 {
    if (!charges)
@@ -586,6 +615,7 @@ RETRO_API bool retro_load_game(const struct retro_game_info *info)
       return false;
    }
    journal("console 2 : jeu charge");
+   declarer_la_memoire();
    lire_options();
    en_jeu = true;
    return true;

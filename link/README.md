@@ -23,6 +23,13 @@ Sound comes from console 1.
   SNK vs. Capcom: Card Fighters' Clash). Set `NGPLINK_RX_IRQ=1` in the environment to turn it on
   for games that drive the serial port themselves.
 
+## Memory map
+
+The core declares a memory map for `READ_CORE_MEMORY` and `WRITE_CORE_MEMORY`: console 1 work RAM at `0x10004000`,
+console 2 work RAM at `0x20004000` (16 KB each), and console 1 again at `0x4000`, its real address, which
+`READ_CORE_RAM` and achievements read. Writing both consoles lets a frontend set, for example, each player's name
+in both consoles before a netplay session starts.
+
 ## Core options
 
 These options change what a machine shows, plays and writes. They have no effect on emulation, so
