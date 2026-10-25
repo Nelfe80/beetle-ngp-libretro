@@ -54,6 +54,11 @@ int system_comms_count(void) { return link_count ? link_count() : (system_comms_
  * Capcom, KOF R-2) en ont besoin. Coupee par defaut. */
 int ngplink_rx_interrupt = 0;
 NGPLINK_API void ngplink_set_rx_interrupt(int actif) { ngplink_rx_interrupt = actif; }
+
+/* La flash ecrite sur le disque, ou gardee en memoire : en netplay, une borne recoit l'etat (et donc la flash) de
+ * l'autre, et ne doit pas l'ecrire par-dessus la sauvegarde de son joueur. */
+static int ecrire_la_flash = 1;
+NGPLINK_API void ngplink_set_flash_write(int actif) { ecrire_la_flash = actif; }
 #define FLASH_SUFFIX flash_suffix
 #else
 bool system_comms_read(uint8_t* buffer) { return 0; }
@@ -85,6 +90,10 @@ bool system_io_flash_write(uint8_t *s, uint32_t len)
    char path_str[1024];
    RFILE *flash_fp = NULL;
 
+#ifdef NGPLINK
+   if (!ecrire_la_flash)
+      return 1;
+#endif
    MDFN_MakeFName(MDFNMKF_SAV, path_str, sizeof(path_str), 0, FLASH_SUFFIX);
    flash_fp = filestream_open(path_str,
          RETRO_VFS_FILE_ACCESS_WRITE,

@@ -48,6 +48,7 @@ typedef struct
    void (*set_flash_suffix)(const char *);
    void (*set_count)(int (*)(void));
    void (*set_rx_interrupt)(int);
+   void (*set_flash_write)(int);
    uint16_t image[LARGEUR_ECRAN * HAUTEUR_ECRAN];
 } moteur_t;
 
@@ -72,6 +73,13 @@ static retro_input_poll_t poll_front;
 static retro_input_state_t state_front;
 static bool mise_a_jour_b;
 static uint16_t ecran[LARGEUR_ECRAN * 2 * HAUTEUR_ECRAN];
+
+/* Ce que la borne montre et fait entendre (options ngplink_display et ngplink_audio). Sans effet sur l'emulation : en
+ * netplay, chaque borne montre sa console a sa taille et fait entendre son son. */
+static int ecran_montre; /* 0 : les deux cote a cote, 1 : la console 1, 2 : la console 2 */
+static int son_de;       /* 0 : la console 1, 1 : la console 2 */
+static bool relire_options;
+static bool en_jeu;
 
 /* Mise au point : les 64 premiers octets envoyes par chaque console, avec l'image ou ils partent. */
 static unsigned images_jouees;
@@ -170,7 +178,8 @@ static void journal(const char *texte)
    void p##ngplink_set_comms(bool (*)(uint8_t *), bool (*)(uint8_t *), void (*)(uint8_t)); \
    void p##ngplink_set_flash_suffix(const char *); \
    void p##ngplink_set_count(int (*)(void)); \
-   void p##ngplink_set_rx_interrupt(int);
+   void p##ngplink_set_rx_interrupt(int); \
+   void p##ngplink_set_flash_write(int);
 DECLARER(a_)
 DECLARER(b_)
 
@@ -203,6 +212,7 @@ DECLARER(b_)
       (m)->set_flash_suffix = p##ngplink_set_flash_suffix; \
       (m)->set_count = p##ngplink_set_count; \
       (m)->set_rx_interrupt = p##ngplink_set_rx_interrupt; \
+      (m)->set_flash_write = p##ngplink_set_flash_write; \
    } while (0)
 
 /* Les deux moteurs sont dans ce coeur : les brancher ne peut pas echouer, une seule fois suffit. */
@@ -244,7 +254,7 @@ static bool env_a(unsigned cmd, void *data)
       {
          bool r = env_front(cmd, data);
          if (r && data && *(bool *)data)
-            mise_a_jour_b = true;
+            mise_a_jour_b = relire_options = true;
          return r;
       }
       default:
@@ -317,11 +327,47 @@ static void video_console(moteur_t *m, const void *donnees, unsigned largeur, un
 static void video_a(const void *d, unsigned w, unsigned h, size_t p) { video_console(&consoles[0], d, w, h, p); }
 static void video_b(const void *d, unsigned w, unsigned h, size_t p) { video_console(&consoles[1], d, w, h, p); }
 
-/* Le son : celui de la console 1 (deux fois la meme musique se melangerait mal). */
-static void son_a(int16_t g, int16_t d) { audio_front(g, d); }
-static size_t son_lot_a(const int16_t *d, size_t n) { return audio_batch_front(d, n); }
-static void son_b(int16_t g, int16_t d) { (void)g; (void)d; }
-static size_t son_lot_b(const int16_t *d, size_t n) { (void)d; return n; }
+/* Le son : celui d'une seule console (deux fois la meme musique se melangerait mal). */
+static void son_a(int16_t g, int16_t d) { if (son_de == 0) audio_front(g, d); }
+static size_t son_lot_a(const int16_t *d, size_t n) { return son_de == 0 ? audio_batch_front(d, n) : n; }
+static void son_b(int16_t g, int16_t d) { if (son_de == 1) audio_front(g, d); }
+static size_t son_lot_b(const int16_t *d, size_t n) { return son_de == 1 ? audio_batch_front(d, n) : n; }
+
+static void geometrie(struct retro_game_geometry *g)
+{
+   g->base_width = ecran_montre ? LARGEUR_ECRAN : LARGEUR_ECRAN * 2;
+   g->base_height = HAUTEUR_ECRAN;
+   g->max_width = LARGEUR_ECRAN * 2;
+   g->max_height = HAUTEUR_ECRAN;
+   g->aspect_ratio = (float)g->base_width / (float)HAUTEUR_ECRAN;
+}
+
+static void lire_options(void)
+{
+   struct retro_variable var;
+   int avant = ecran_montre;
+   var.key = "ngplink_display";
+   var.value = NULL;
+   ecran_montre = 0;
+   if (env_front(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      ecran_montre = !strcmp(var.value, "console 1") ? 1 : !strcmp(var.value, "console 2") ? 2 : 0;
+   var.key = "ngplink_audio";
+   var.value = NULL;
+   son_de = env_front(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && !strcmp(var.value, "console 2") ? 1 : 0;
+   var.key = "ngplink_save";
+   var.value = NULL;
+   {
+      int ecrire = !(env_front(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && !strcmp(var.value, "off"));
+      consoles[0].set_flash_write(ecrire);
+      consoles[1].set_flash_write(ecrire);
+   }
+   if (en_jeu && ecran_montre != avant)
+   {
+      struct retro_game_geometry g;
+      geometrie(&g);
+      env_front(RETRO_ENVIRONMENT_SET_GEOMETRY, &g);
+   }
+}
 
 static void sonder_a(void) { poll_front(); }
 static void sonder_b(void) { }
@@ -385,7 +431,7 @@ RETRO_API void retro_get_system_info(struct retro_system_info *info)
    if (charger())
       consoles[0].get_system_info(info);
    info->library_name = "Beetle NGP Link";
-   info->library_version = "0.1 NelfePlay";
+   info->library_version = "0.2 NelfePlay";
    if (!info->valid_extensions)
       info->valid_extensions = "ngp|ngc|ngpc|npc";
 }
@@ -393,11 +439,7 @@ RETRO_API void retro_get_system_info(struct retro_system_info *info)
 RETRO_API void retro_get_system_av_info(struct retro_system_av_info *info)
 {
    consoles[0].get_system_av_info(info);
-   info->geometry.base_width = LARGEUR_ECRAN * 2;
-   info->geometry.base_height = HAUTEUR_ECRAN;
-   info->geometry.max_width = LARGEUR_ECRAN * 2;
-   info->geometry.max_height = HAUTEUR_ECRAN;
-   info->geometry.aspect_ratio = (float)(LARGEUR_ECRAN * 2) / (float)HAUTEUR_ECRAN;
+   geometrie(&info->geometry);
 }
 
 RETRO_API void retro_set_controller_port_device(unsigned port, unsigned device)
@@ -420,6 +462,11 @@ RETRO_API void retro_run(void)
    if (images_jouees % 60 == 0)
       TRACE("image %u : console 1", images_jouees);
    consoles[0].run();
+   if (relire_options)
+   {
+      relire_options = false;
+      lire_options();
+   }
    if (images_jouees % 60 == 0)
       TRACE("image %u : console 2", images_jouees);
    consoles[1].run();
@@ -440,6 +487,11 @@ RETRO_API void retro_run(void)
       journal(trace_octets[1]);
    }
 #endif
+   if (ecran_montre)
+   {
+      video_front(consoles[ecran_montre - 1].image, LARGEUR_ECRAN, HAUTEUR_ECRAN, LARGEUR_ECRAN * sizeof(uint16_t));
+      return;
+   }
    for (y = 0; y < HAUTEUR_ECRAN; y++)
    {
       memcpy(ecran + y * LARGEUR_ECRAN * 2, consoles[0].image + y * LARGEUR_ECRAN, LARGEUR_ECRAN * 2);
@@ -534,6 +586,8 @@ RETRO_API bool retro_load_game(const struct retro_game_info *info)
       return false;
    }
    journal("console 2 : jeu charge");
+   lire_options();
+   en_jeu = true;
    return true;
 }
 
@@ -548,6 +602,7 @@ RETRO_API void retro_unload_game(void)
    consoles[0].unload_game();
    consoles[1].unload_game();
    taille_fixe = 0;
+   en_jeu = false;
 }
 
 RETRO_API unsigned retro_get_region(void) { return consoles[0].get_region(); }

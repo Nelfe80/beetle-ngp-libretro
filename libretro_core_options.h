@@ -52,6 +52,53 @@ struct retro_core_option_v2_definition option_defs_us_v2[] = {
       },
       "english",
    },
+#ifdef NGPLINK
+   /* NGP LINK : ce que la borne montre et fait entendre (lu par le coeur enveloppe ; sans effet sur l'emulation, deux
+    * bornes en netplay peuvent donc montrer chacune sa console). */
+   {
+      "ngplink_display",
+      "Link: Screen",
+      NULL,
+      "Both consoles side by side, or only one of them at its own size.",
+      NULL,
+      "system",
+      {
+         { "both",  "Both consoles" },
+         { "console 1",  "Console 1" },
+         { "console 2",  "Console 2" },
+         { NULL, NULL},
+      },
+      "both",
+   },
+   {
+      "ngplink_audio",
+      "Link: Sound",
+      NULL,
+      "The console whose sound is played.",
+      NULL,
+      "system",
+      {
+         { "console 1",  "Console 1" },
+         { "console 2",  "Console 2" },
+         { NULL, NULL},
+      },
+      "console 1",
+   },
+   {
+      "ngplink_save",
+      "Link: Save Data to Disk",
+      NULL,
+      "Off keeps the save data of both consoles in memory only (netplay: the data comes from the host and must not replace the local save).",
+      NULL,
+      "system",
+      {
+         { "on",  "On" },
+         { "off",  "Off" },
+         { NULL, NULL},
+      },
+      "on",
+   },
+#endif
    { NULL, NULL, NULL, NULL, NULL, NULL, {{0}}, NULL },
 };
 
@@ -72,6 +119,42 @@ struct retro_core_option_definition option_defs_us[] = {
       },
       "english",
    },
+#ifdef NGPLINK
+   {
+      "ngplink_display",
+      "Link: Screen",
+      "Both consoles side by side, or only one of them at its own size.",
+      {
+         { "both",  "Both consoles" },
+         { "console 1",  "Console 1" },
+         { "console 2",  "Console 2" },
+         { NULL, NULL},
+      },
+      "both",
+   },
+   {
+      "ngplink_audio",
+      "Link: Sound",
+      "The console whose sound is played.",
+      {
+         { "console 1",  "Console 1" },
+         { "console 2",  "Console 2" },
+         { NULL, NULL},
+      },
+      "console 1",
+   },
+   {
+      "ngplink_save",
+      "Link: Save Data to Disk",
+      "Off keeps the save data of both consoles in memory only (netplay: the data comes from the host and must not replace the local save).",
+      {
+         { "on",  "On" },
+         { "off",  "Off" },
+         { NULL, NULL},
+      },
+      "on",
+   },
+#endif
    { NULL, NULL, NULL, { NULL, NULL }, NULL },
 };
 

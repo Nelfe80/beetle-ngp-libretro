@@ -5,7 +5,7 @@ supported_extensions = "ngp|ngc|ngpc|npc"
 corename = "Beetle NGP Link"
 license = "GPLv2"
 permissions = ""
-display_version = "v0.1 NelfePlay"
+display_version = "v0.2 NelfePlay"
 categories = "Emulator"
 
 # Hardware Information

@@ -23,6 +23,17 @@ Sound comes from console 1.
   SNK vs. Capcom: Card Fighters' Clash). Set `NGPLINK_RX_IRQ=1` in the environment to turn it on
   for games that drive the serial port themselves.
 
+## Core options
+
+These options change what a machine shows, plays and writes. They have no effect on emulation, so
+two machines in a netplay session can set them differently.
+
+| Option | Values | Use |
+|---|---|---|
+| `ngplink_display` | `both` (default), `console 1`, `console 2` | One console at its own size (160x152), for example the local player's console in netplay |
+| `ngplink_audio` | `console 1` (default), `console 2` | The console whose sound is played |
+| `ngplink_save` | `on` (default), `off` | `off` keeps the flash save data of both consoles in memory only. In netplay the guest receives the host's data, which must not replace its local save |
+
 ## Build (MSYS2, MinGW 64-bit)
 
 ```
