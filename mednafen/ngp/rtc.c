@@ -14,6 +14,7 @@
 
 #include "../mednafen-types.h"
 #include <time.h>
+#include <string.h>
 
 static uint8 rtc_latch[7];
 
@@ -24,9 +25,21 @@ static void update_rtc_latch(void)
    struct tm *localTime;
    time_t long_time;
 
+#ifdef NGPLINK
+   /* NGP LINK : une horloge FIGEE (1er janvier 2000, minuit). L'heure de la machine differe d'une borne a l'autre et
+    * casserait la netplay des qu'un jeu la lit. */
+   static struct tm fige;
+   (void)long_time;
+   memset(&fige, 0, sizeof(fige));
+   fige.tm_year = 100;
+   fige.tm_mday = 1;
+   fige.tm_wday = 6;
+   localTime = &fige;
+#else
    //Get the system time
    time(&long_time);
    localTime = localtime(&long_time);
+#endif
    if (localTime)
    {
       low = localTime->tm_year - 100; high = low;             /* Years */

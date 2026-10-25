@@ -10,16 +10,50 @@
 
 #include <streams/file_stream.h>
 
+#ifdef NGPLINK
+/* NGP LINK (NelfePlay) : le port de liaison est branche par le coeur enveloppe, qui charge deux moteurs et relie
+ * leurs ports. Sans branchement, le port reste muet comme dans le coeur d'origine. */
+#ifdef _WIN32
+#define NGPLINK_API __declspec(dllexport)
+#else
+#define NGPLINK_API __attribute__((visibility("default")))
+#endif
+static bool (*link_read)(uint8_t*) = NULL;
+static bool (*link_poll)(uint8_t*) = NULL;
+static void (*link_write)(uint8_t) = NULL;
+static char flash_suffix[32] = "flash";
+
+NGPLINK_API void ngplink_set_comms(bool (*lire)(uint8_t*), bool (*guetter)(uint8_t*), void (*ecrire)(uint8_t))
+{
+   link_read  = lire;
+   link_poll  = guetter;
+   link_write = ecrire;
+}
+
+/* La console 2 sauve sa flash a part : sinon les deux consoles ecriraient le meme fichier. */
+NGPLINK_API void ngplink_set_flash_suffix(const char *suffixe)
+{
+   strncpy(flash_suffix, suffixe, sizeof(flash_suffix) - 1);
+   flash_suffix[sizeof(flash_suffix) - 1] = 0;
+}
+
+bool system_comms_read(uint8_t* buffer) { return link_read ? link_read(buffer) : 0; }
+bool system_comms_poll(uint8_t* buffer) { return link_poll ? link_poll(buffer) : 0; }
+void system_comms_write(uint8_t data) { if (link_write) link_write(data); }
+#define FLASH_SUFFIX flash_suffix
+#else
 bool system_comms_read(uint8_t* buffer) { return 0; }
 bool system_comms_poll(uint8_t* buffer) { return 0; }
 void system_comms_write(uint8_t data) { }
+#define FLASH_SUFFIX "flash"
+#endif
 
 bool system_io_flash_read(uint8_t *s, uint32_t len)
 {
    char path_str[1024];
    RFILE *flash_fp = NULL;
 
-   MDFN_MakeFName(MDFNMKF_SAV, path_str, sizeof(path_str), 0, "flash");
+   MDFN_MakeFName(MDFNMKF_SAV, path_str, sizeof(path_str), 0, FLASH_SUFFIX);
    flash_fp = filestream_open(path_str,
          RETRO_VFS_FILE_ACCESS_READ, RETRO_VFS_FILE_ACCESS_HINT_NONE);
 
@@ -37,7 +71,7 @@ bool system_io_flash_write(uint8_t *s, uint32_t len)
    char path_str[1024];
    RFILE *flash_fp = NULL;
 
-   MDFN_MakeFName(MDFNMKF_SAV, path_str, sizeof(path_str), 0, "flash");
+   MDFN_MakeFName(MDFNMKF_SAV, path_str, sizeof(path_str), 0, FLASH_SUFFIX);
    flash_fp = filestream_open(path_str,
          RETRO_VFS_FILE_ACCESS_WRITE,
          RETRO_VFS_FILE_ACCESS_HINT_NONE);
